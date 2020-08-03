@@ -24,6 +24,7 @@ stype <- c("text", "data", "audio", "video", "3d_img", "raster_img",
 type_tojoin <- data.frame(type = ctype, stype = stype)
 
 
-common_file_types <- full_join(common_file_types, type_tojoin)
+common_file_types <- full_join(common_file_types, type_tojoin) %>%
+  as_tibble()
 
 usethis::use_data(common_file_types, overwrite = TRUE)

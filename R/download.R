@@ -2,6 +2,8 @@
 
 #' @importFrom xml2 read_html
 #' @importFrom rvest html_nodes
+#' @importFrom curl has_internet
+#' @importFrom httr http_error message_for_status
 url_content_a <- function(url) {
 
   if (!curl::has_internet()) {
@@ -23,9 +25,17 @@ url_content_a <- function(url) {
 
 # List content of a page --------------------------------------------------
 
-
+#' List all the contents of a webpage
+#'
+#' @param url the url.
+#' @param pattern the extension.
+#' @param full whether to display the relative path of the absolute path.
+#' @param negate_expr exclude some pages that do not have usefull content.
+#'
+#' @importFrom rvest html_attr html_text
 #' @export
-list_content <- function(url, pattern = NULL, full = FALSE, negate_expr = c("[^#|^#0-9^/||^/A-Za-z+$]")) {
+list_content <- function(url, pattern = NULL, full = FALSE,
+                         negate_expr = c("[^#|^#0-9^/||^/A-Za-z+$]")) {
   url_content <- url_content_a(url)
   description <- html_text(url_content, "href")
   filename <- html_attr(url_content, "href")
@@ -57,6 +67,8 @@ list_content <- function(url, pattern = NULL, full = FALSE, negate_expr = c("[^#
   out
 }
 
+
+#' @importFrom cli cat_line
 #' @export
 print.content <- function(x, ..., n = nrow(x), width = NULL, n_extra = NULL) {
   cli::cat_line(format(x, ..., n = n, width = width, n_extra = n_extra))
@@ -65,11 +77,19 @@ print.content <- function(x, ..., n = nrow(x), width = NULL, n_extra = NULL) {
 
 # Download helpers --------------------------------------------------------
 
+
+#' Ask to input the extension type
+#'
 #' @export
 ask <- function() {
-  readline(prompt = "Enter pattern: \n ")
+  readline(prompt = "Enter file extension (e.g. .pdf): \n ")
 }
 
+
+#' Helper function to split the file extensions into type
+#'
+#' @param type category of file extension
+#'
 #' @export
 file_type <- function(type) {
   stype <- c("text", "data", "audio", "video", "3d_img", "raster_img",
@@ -79,18 +99,18 @@ file_type <- function(type) {
   if(!type %in% stype) {
     stop("Wrong file type.", call. = TRUE)
   }
-  sub <- type == common_file_types$stype
-  ext <- common_file_types[sub, ]$ext
-  paste(ext, collapse = "|")
+  sub <- type == get("common_file_types")$stype
+  get("common_file_types")[sub, ]$ext
 }
 
 
 # Download ----------------------------------------------------------------
 
+#' @importFrom xml2 url_absolute
 build_url <- function(url, pattern) {
   relative_url_raw <- html_attr(url_content_a(url), "href")
-  # TODO multiple regex messes with the grep use file_ext here too
-  relative_url <- grep(pattern, relative_url_raw, value = TRUE)
+  keep_ext <- grep(pattern, file_ext(relative_url_raw))
+  relative_url <- relative_url_raw[keep_ext]
   url_absolute(relative_url, url)
 }
 
@@ -114,33 +134,39 @@ build_filename <- function(url_abs, dest = ".") {
 
 #' Download multiple file from a url
 #'
-#' @param pattern ask() or file_type()
 #'
+#' @inheritParams list_content
+#' @param ext ask() or file_type()
+#' @param dest a character string (or vector, see url) with the name where the
+#' downloaded file is saved. Tilde-expansion is performed.
+#' @param verbose whether to print the url of the data.
+#' @param ... further options.
 #'
-#' @import xml2
-#' @import rvest
+#' @importFrom httr GET write_disk
 #' @importFrom tibble tibble
 #' @export
-download <- function(url, pattern = ask(), dest = ".", access_info = TRUE, ...) {
+download <- function(url, ext = ask(), dest = ".", verbose = TRUE, ...) {
 
-  # TODO valid pattern
-  # if(is.null())
-
+  valid_ext <- ext %in% get("common_file_types")$ext
+  if(!all(valid_ext)) {
+    stop("Invalid file extension. Do not recognise ",
+         backticks(ext[!valid_ext]), " format.", call. = FALSE)
+  }
   if (length(url) != 1L || typeof(url) != "character") {
-    stop("'url' must be a length-one character vector")
+    stop("'url' must be a length-one character vector", call. = FALSE)
   }
   if (length(dest) != 1L || typeof(dest) != "character") {
-    stop("'dest' must be a length-one character vector")
+    stop("'dest' must be a length-one character vector", call. = FALSE)
   }
-
-  file_urls <- build_url(url, pattern)
+  pattern_ext <- paste(ext, collapse = "|")
+  file_urls <- build_url(url, pattern_ext)
   file_names <- build_filename(file_urls, dest)
   n_files <- length(file_names)
 
   if(n_files == 0) {
     stop("No files available with this extension.", call. = FALSE)
   }
-  if (interactive() && access_info) {
+  if (interactive() && verbose) {
     message("Accessing: ", url, "\nDownloading: ", n_files, " file(s).")
   }
 
@@ -148,7 +174,7 @@ download <- function(url, pattern = ask(), dest = ".", access_info = TRUE, ...) 
     resp <- GET(file_urls[i], write_disk(file_names[i], ...))
     # This chunk is just to make sure that the files are accessible
     if (!is_response(resp)) {
-      message(resp_file)
+      message(resp)
       return(invisible(NULL))
     }
   }

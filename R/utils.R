@@ -1,6 +1,6 @@
 
 
-#' @importFrom httr GET
+#' @importFrom httr GET timeout
 try_GET <- function (x, ...) {
   tryCatch(
     GET(url = x, timeout(10), ...),
@@ -14,16 +14,19 @@ is_response <- function (x) {
 
 # string cleaning ---------------------------------------------------------
 
+
+backticks <- function(x) {
+  paste0("`", x, "`", collapse = ",")
+}
+
 clean_query <- function(x) {
   gsub("\\?.*", "", x)
 }
 
-#' Check if a substring is a url
 is_url <- function(x) {
   grepl("(https|http)",x)
 }
 
-#' have to consider query
 file_ext <- function (x) {
   x <- clean_query(x)
   idx <- regexpr("\\.([[:alnum:]]+)$", x)
@@ -33,12 +36,12 @@ file_ext <- function (x) {
 }
 
 file_ext_desc <- function(x) {
-  dm <- match(x, common_file_types$ext)
-  common_file_types$desc[dm]
+  dm <- match(x, get("common_file_types")$ext)
+  get("common_file_types")$desc[dm]
 }
 
 file_ext_category <- function(x) {
-  cat <- match(x, common_file_types$ext)
-  common_file_types$type[cat]
+  cat <- match(x, get("common_file_types")$ext)
+  get("common_file_types")$type[cat]
 }
 
